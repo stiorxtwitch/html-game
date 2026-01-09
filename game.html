@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>CS Mini 3D - FPS Basique</title>
+  <style>
+    body { margin:0; overflow:hidden; background:#000; font-family:Arial,Helvetica,sans-serif; }
+    canvas { display:block; }
+    #ui {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      color: white;
+      user-select: none;
+    }
+    #crosshair {
+      position: absolute;
+      inset: 0;
+      margin: auto;
+      width: 20px;
+      height: 20px;
+      border: 2px solid #fff;
+      border-radius: 50%;
+      box-shadow: 0 0 6px #000;
+      pointer-events: none;
+    }
+    #hud {
+      position: absolute;
+      top: 15px;
+      left: 15px;
+      background: rgba(0,0,0,0.65);
+      padding: 12px 18px;
+      border-radius: 8px;
+      font-size: 1.1rem;
+      line-height: 1.5;
+    }
+    #message {
+      position: absolute;
+      top: 40%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 3.8rem;
+      font-weight: bold;
+      text-shadow: 0 0 15px black;
+      pointer-events: none;
+      text-align: center;
+    }
+    #start-screen {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.85);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      color: white;
+      font-size: 2.2rem;
+      cursor: pointer;
+      z-index: 100;
+    }
+    button {
+      margin-top: 30px;
+      padding: 15px 40px;
+      font-size: 1.6rem;
+      background: #c41e3a;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+
+<div id="start-screen">
+  <div>CS:GO Mini 3D</div>
+  <div style="font-size:1.4rem; margin:30px 0; max-width:700px; text-align:center;">
+    WASD → déplacer • Souris → viser • Clic gauche → tirer<br>
+    Espace → sauter • Objectif : éliminer tous les bots chaque manche
+  </div>
+  <button id="startBtn">JOUER</button>
+</div>
+
+<div id="ui">
+  <div id="hud">
+    Santé: <span id="health">100</span><br>
+    Manche: <span id="round">1</span><br>
+    Ennemis: <span id="enemiesLeft">0</span><br>
+    Score: <span id="score">0</span>
+  </div>
+  <div id="crosshair">+</div>
+  <div id="message"></div>
+</div>
+
+<script type="module">
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.168.0/build/three.module.js'
+import { PointerLockControls } from 'https://cdn.jsdelivr.net/npm/three@0.168.0/examples/jsm/controls/PointerLockControls.js'
+import * as CANNON from 'https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/+esm'
+
+const scene = new THREE.Scene()
+scene.background = new THREE.Color(0x88aaff)
+scene.fog = new THREE.FogExp2(0x88aaff, 0.0008)
+
+const camera = new THREE.PerspectiveCamera(75, innerWidth/innerHeight, 0.1, 1000)
+const renderer = new THREE.WebGLRenderer({antialias:true})
+renderer.setSize(innerWidth, innerHeight)
+renderer.shadowMap.enabled = true
+document.body.appendChild(renderer.domElement)
+
+// Physique
+const world = new CANNON.World({gravity: new CANNON.Vec3(0, -20, 0)})
+
+// Sol
+const groundGeo = new THREE.PlaneGeometry(200, 200)
+const groundMat = new THREE.MeshStandardMaterial({color:0x444444, roughness:0.9})
+const ground = new THREE.Mesh(groundGeo, groundMat)
+ground.rotation.x = -Math.PI/2
+ground.receiveShadow = true
+scene.add(ground)
+
+const groundBody = new CANNON.Body({mass:0, shape:new CANNON.Plane()})
+groundBody.quaternion.setFromEuler(-Math.PI/2, 0, 0)
+world.addBody(groundBody)
+
+// Lumière
+scene.add(new THREE.AmbientLight(0xffffff, 0.5))
+const sun = new THREE.DirectionalLight(0xffffff, 1.2)
+sun.position.set(30, 60, 40)
+sun.castShadow = true
+sun.shadow.mapSize.width = 2048
+sun.shadow.mapSize.height = 2048
+scene.add(sun)
+
+// Contrôles FPS
+const controls = new PointerLockControls(camera, document.body)
+scene.add(controls.getObject())
+
+// Corps du joueur (physique)
+const playerRadius = 0.4
+const playerShape = new CANNON.Sphere(playerRadius)
+const playerBody = new CANNON.Body({mass: 5, material: new CANNON.Material("player")})
+playerBody.addShape(playerShape)
+playerBody.angularFactor = new CANNON.Vec3(0,0,0)
+playerBody.position.set(0, 5, 0)
+world.addBody(playerBody)
+
+let move = {forward:false, backward:false, left:false, right:false, jump:false}
+const velocity = new THREE.Vector3()
+const direction = new THREE.Vector3()
+
+// --- Input ---
+document.addEventListener('keydown', e => {
+  switch(e.code){
+    case 'KeyW': move.forward = true; break
+    case 'KeyS': move.backward = true; break
+    case 'KeyA': move.left = true; break
+    case 'KeyD': move.right = true; break
+    case 'Space': if(canJump) move.jump = true; break
+  }
+})
+
+document.addEventListener('keyup', e => {
+  switch(e.code){
+    case 'KeyW': move.forward = false; break
+    case 'KeyS': move.backward = false; break
+    case 'KeyA': move.left = false; break
+    case 'KeyD': move.right = false; break
+    case 'Space': move.jump = false; break
+  }
+})
+
+let canJump = false
+
+// --- Tir ---
+let bullets = []
+let score = 0
+let health = 100
+let round = 1
+let enemies = []
+
+function shoot() {
+  if(health <= 0) return
+
+  const bulletGeo = new THREE.SphereGeometry(0.08)
+  const bulletMat = new THREE.MeshBasicMaterial({color:0xffff00})
+  const bullet = new THREE.Mesh(bulletGeo, bulletMat)
+  
+  bullet.position.copy(controls.getObject().position)
+  bullet.position.y += 0.3
+  
+  const dir = new THREE.Vector3()
+  controls.getDirection(dir)
+  
+  bullet.velocity = dir.clone().multiplyScalar(120)
+  scene.add(bullet)
+  bullets.push(bullet)
+}
+
+// Clic pour tirer
+document.addEventListener('click', () => {
+  if(!controls.isLocked) return
+  shoot()
+  // Petit recul visuel
+  controls.getObject().rotation.x -= 0.04
+  setTimeout(()=>controls.getObject().rotation.x += 0.04, 80)
+})
+
+// --- Ennemis ---
+function createEnemy(x,z) {
+  const group = new THREE.Group()
+  
+  const body = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.4,0.4,1.8,12),
+    new THREE.MeshStandardMaterial({color:0xc41e3a})
+  )
+  body.position.y = 0.9
+  body.castShadow = true
+  group.add(body)
+  
+  const head = new THREE.Mesh(
+    new THREE.SphereGeometry(0.35,16,16),
+    new THREE.MeshStandardMaterial({color:0xc41e3a})
+  )
+  head.position.y = 1.9
+  group.add(head)
+  
+  group.position.set(x, 0, z)
+  scene.add(group)
+  
+  const bodyPhys = new CANNON.Body({
+    mass: 5,
+    shape: new CANNON.Cylinder(0.4,0.4,1.8,8)
+  })
+  bodyPhys.position.copy(group.position)
+  bodyPhys.position.y += 0.9
+  world.addBody(bodyPhys)
+  
+  return {mesh:group, body:bodyPhys, alive:true, hp:3}
+}
+
+function spawnRound() {
+  enemies.forEach(e => {
+    if(e.alive){
+      scene.remove(e.mesh)
+      world.removeBody(e.body)
+    }
+  })
+  enemies = []
+
+  const count = 3 + round * 2
+  
+  for(let i=0; i<count; i++){
+    const angle = (i / count) * Math.PI * 2
+    const dist = 25 + Math.random()*15
+    const x = Math.cos(angle) * dist
+    const z = Math.sin(angle) * dist
+    enemies.push(createEnemy(x,z))
+  }
+  
+  document.getElementById('enemiesLeft').textContent = enemies.filter(e=>e.alive).length
+  document.getElementById('round').textContent = round
+  document.getElementById('message').textContent = `Manche ${round}`
+  setTimeout(()=>document.getElementById('message').textContent='', 1800)
+}
+
+// --- Game loop ---
+let prevTime = performance.now()
+
+function animate(time) {
+  requestAnimationFrame(animate)
+  
+  const delta = (time - prevTime) / 1000
+  prevTime = time
+
+  world.step(1/60, delta, 3)
+
+  // Mise à jour position caméra/joueur
+  if(controls.isLocked && health > 0) {
+    velocity.x -= velocity.x * 8.0 * delta
+    velocity.z -= velocity.z * 8.0 * delta
+
+    direction.z = Number(move.forward) - Number(move.backward)
+    direction.x = Number(move.right) - Number(move.left)
+    direction.normalize()
+
+    const speed = 28
+
+    if (move.forward || move.backward) velocity.z -= direction.z * speed * delta
+    if (move.left || move.right) velocity.x -= direction.x * speed * delta
+
+    controls.moveRight(-velocity.x * delta)
+    controls.moveForward(-velocity.z * delta)
+
+    // Saut
+    if (move.jump && canJump) {
+      playerBody.velocity.y = 18
+      canJump = false
+    }
+
+    // Synchro physique → visuel
+    controls.getObject().position.copy(playerBody.position)
+    controls.getObject().position.y -= 1.6 // yeux au bon endroit
+  }
+
+  // Bullets
+  for(let i=bullets.length-1; i>=0; i--){
+    const b = bullets[i]
+    b.position.add(b.velocity.clone().multiplyScalar(delta))
+    
+    // Collision simple avec ennemis
+    for(let e of enemies){
+      if(!e.alive) continue
+      const dist = b.position.distanceTo(e.mesh.position)
+      if(dist < 1.2){
+        e.hp--
+        if(e.hp <= 0){
+          e.alive = false
+          scene.remove(e.mesh)
+          world.removeBody(e.body)
+          score += 100
+          document.getElementById('score').textContent = score
+        }
+        scene.remove(b)
+        bullets.splice(i,1)
+        break
+      }
+    }
+
+    // Suppression bullets trop loin
+    if(b.position.length() > 200){
+      scene.remove(b)
+      bullets.splice(i,1)
+    }
+  }
+
+  // Mise à jour HUD
+  document.getElementById('health').textContent = health
+
+  // Victoire manche ?
+  const aliveEnemies = enemies.filter(e=>e.alive).length
+  document.getElementById('enemiesLeft').textContent = aliveEnemies
+
+  if(aliveEnemies === 0 && health > 0){
+    round++
+    setTimeout(spawnRound, 2200)
+  }
+
+  // Défaite
+  if(health <= 0){
+    document.getElementById('message').textContent = "GAME OVER"
+    document.getElementById('message').style.color = "#ff4444"
+  }
+
+  renderer.render(scene, camera)
+}
+
+animate()
+
+// --- Démarrage ---
+document.getElementById('startBtn').onclick = () => {
+  document.getElementById('start-screen').style.display = 'none'
+  controls.lock()
+  spawnRound()
+}
+
+// Resize
+window.addEventListener('resize', ()=>{
+  camera.aspect = innerWidth / innerHeight
+  camera.updateProjectionMatrix()
+  renderer.setSize(innerWidth, innerHeight)
+})
+
+// Bonus : petit recul quand on prend des dégâts (simulation)
+setInterval(()=>{
+  if(Math.random() < 0.03 && health > 0){
+    health -= 8
+    controls.getObject().rotation.x += 0.06
+  }
+}, 1800)
+
+</script>
+</body>
+</html>

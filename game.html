@@ -5,21 +5,28 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>CS Mini 3D - FPS Basique</title>
   <style>
-    body { margin:0; overflow:hidden; background:#000; font-family:Arial,Helvetica,sans-serif; }
-    canvas { display:block; }
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      font-family: Arial, Helvetica, sans-serif;
+    }
+    canvas { display: block; }
     #ui {
       position: fixed;
       inset: 0;
       pointer-events: none;
       color: white;
       user-select: none;
+      z-index: 50;
     }
     #crosshair {
       position: absolute;
-      inset: 0;
-      margin: auto;
-      width: 20px;
-      height: 20px;
+      top: 50%;
+      left: 50%;
+      width: 24px;
+      height: 24px;
+      margin: -12px 0 0 -12px;
       border: 2px solid #fff;
       border-radius: 50%;
       box-shadow: 0 0 6px #000;
@@ -32,7 +39,7 @@
       background: rgba(0,0,0,0.65);
       padding: 12px 18px;
       border-radius: 8px;
-      font-size: 1.1rem;
+      font-size: 1.2rem;
       line-height: 1.5;
     }
     #message {
@@ -40,7 +47,7 @@
       top: 40%;
       left: 50%;
       transform: translate(-50%, -50%);
-      font-size: 3.8rem;
+      font-size: 4rem;
       font-weight: bold;
       text-shadow: 0 0 15px black;
       pointer-events: none;
@@ -55,14 +62,14 @@
       justify-content: center;
       align-items: center;
       color: white;
-      font-size: 2.2rem;
+      font-size: 2.4rem;
       cursor: pointer;
       z-index: 100;
     }
-    button {
-      margin-top: 30px;
-      padding: 15px 40px;
-      font-size: 1.6rem;
+    #startBtn {
+      margin-top: 40px;
+      padding: 18px 50px;
+      font-size: 1.8rem;
       background: #c41e3a;
       color: white;
       border: none;
@@ -75,9 +82,12 @@
 
 <div id="start-screen">
   <div>CS:GO Mini 3D</div>
-  <div style="font-size:1.4rem; margin:30px 0; max-width:700px; text-align:center;">
-    WASD → déplacer • Souris → viser • Clic gauche → tirer<br>
-    Espace → sauter • Objectif : éliminer tous les bots chaque manche
+  <div style="font-size:1.4rem; margin:40px 0; max-width:720px; text-align:center; line-height:1.6;">
+    WASD → déplacer<br>
+    Souris → viser<br>
+    Clic gauche → tirer<br>
+    Espace → sauter<br><br>
+    Objectif : éliminer tous les bots chaque manche
   </div>
   <button id="startBtn">JOUER</button>
 </div>
@@ -100,68 +110,70 @@ import * as CANNON from 'https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/+esm'
 
 const scene = new THREE.Scene()
 scene.background = new THREE.Color(0x88aaff)
-scene.fog = new THREE.FogExp2(0x88aaff, 0.0008)
+scene.fog = new THREE.FogExp2(0x88aaff, 0.0009)
 
-const camera = new THREE.PerspectiveCamera(75, innerWidth/innerHeight, 0.1, 1000)
-const renderer = new THREE.WebGLRenderer({antialias:true})
+const camera = new THREE.PerspectiveCamera(75, innerWidth / innerHeight, 0.1, 1000)
+const renderer = new THREE.WebGLRenderer({ antialias: true })
 renderer.setSize(innerWidth, innerHeight)
 renderer.shadowMap.enabled = true
 document.body.appendChild(renderer.domElement)
 
 // Physique
-const world = new CANNON.World({gravity: new CANNON.Vec3(0, -20, 0)})
+const world = new CANNON.World({ gravity: new CANNON.Vec3(0, -25, 0) })
 
 // Sol
-const groundGeo = new THREE.PlaneGeometry(200, 200)
-const groundMat = new THREE.MeshStandardMaterial({color:0x444444, roughness:0.9})
+const groundGeo = new THREE.PlaneGeometry(300, 300)
+const groundMat = new THREE.MeshStandardMaterial({ color: 0x444444, roughness: 0.95 })
 const ground = new THREE.Mesh(groundGeo, groundMat)
-ground.rotation.x = -Math.PI/2
+ground.rotation.x = -Math.PI / 2
 ground.receiveShadow = true
 scene.add(ground)
 
-const groundBody = new CANNON.Body({mass:0, shape:new CANNON.Plane()})
-groundBody.quaternion.setFromEuler(-Math.PI/2, 0, 0)
+const groundBody = new CANNON.Body({ mass: 0, shape: new CANNON.Plane() })
+groundBody.quaternion.setFromEuler(-Math.PI / 2, 0, 0)
 world.addBody(groundBody)
 
 // Lumière
-scene.add(new THREE.AmbientLight(0xffffff, 0.5))
-const sun = new THREE.DirectionalLight(0xffffff, 1.2)
-sun.position.set(30, 60, 40)
+scene.add(new THREE.AmbientLight(0xffffff, 0.6))
+const sun = new THREE.DirectionalLight(0xffffff, 1.4)
+sun.position.set(40, 80, 50)
 sun.castShadow = true
 sun.shadow.mapSize.width = 2048
 sun.shadow.mapSize.height = 2048
 scene.add(sun)
 
-// Contrôles FPS
+// Contrôles FPS + lock souris
 const controls = new PointerLockControls(camera, document.body)
 scene.add(controls.getObject())
 
-// Corps du joueur (physique)
-const playerRadius = 0.4
-const playerShape = new CANNON.Sphere(playerRadius)
-const playerBody = new CANNON.Body({mass: 5, material: new CANNON.Material("player")})
-playerBody.addShape(playerShape)
-playerBody.angularFactor = new CANNON.Vec3(0,0,0)
+// Corps physique du joueur
+const playerBody = new CANNON.Body({
+  mass: 6,
+  material: new CANNON.Material("player")
+})
+playerBody.addShape(new CANNON.Sphere(0.45))
+playerBody.angularFactor = new CANNON.Vec3(0, 0, 0)
 playerBody.position.set(0, 5, 0)
 world.addBody(playerBody)
 
-let move = {forward:false, backward:false, left:false, right:false, jump:false}
-const velocity = new THREE.Vector3()
-const direction = new THREE.Vector3()
+let move = { forward: false, backward: false, left: false, right: false, jump: false }
+let canJump = false
+let velocity = new THREE.Vector3()
+let direction = new THREE.Vector3()
 
-// --- Input ---
+// --- Input clavier ---
 document.addEventListener('keydown', e => {
-  switch(e.code){
+  switch (e.code) {
     case 'KeyW': move.forward = true; break
     case 'KeyS': move.backward = true; break
     case 'KeyA': move.left = true; break
     case 'KeyD': move.right = true; break
-    case 'Space': if(canJump) move.jump = true; break
+    case 'Space': if (canJump) move.jump = true; break
   }
 })
 
 document.addEventListener('keyup', e => {
-  switch(e.code){
+  switch (e.code) {
     case 'KeyW': move.forward = false; break
     case 'KeyS': move.backward = false; break
     case 'KeyA': move.left = false; break
@@ -169,8 +181,6 @@ document.addEventListener('keyup', e => {
     case 'Space': move.jump = false; break
   }
 })
-
-let canJump = false
 
 // --- Tir ---
 let bullets = []
@@ -180,111 +190,108 @@ let round = 1
 let enemies = []
 
 function shoot() {
-  if(health <= 0) return
+  if (health <= 0 || !controls.isLocked) return
 
-  const bulletGeo = new THREE.SphereGeometry(0.08)
-  const bulletMat = new THREE.MeshBasicMaterial({color:0xffff00})
+  const bulletGeo = new THREE.SphereGeometry(0.09)
+  const bulletMat = new THREE.MeshBasicMaterial({ color: 0xffff00 })
   const bullet = new THREE.Mesh(bulletGeo, bulletMat)
-  
+
   bullet.position.copy(controls.getObject().position)
-  bullet.position.y += 0.3
-  
+  bullet.position.y += 0.4
+
   const dir = new THREE.Vector3()
   controls.getDirection(dir)
-  
-  bullet.velocity = dir.clone().multiplyScalar(120)
+
+  bullet.velocity = dir.clone().multiplyScalar(140)
   scene.add(bullet)
   bullets.push(bullet)
+
+  // Recul visuel léger
+  controls.getObject().rotation.x -= 0.045
+  setTimeout(() => controls.getObject().rotation.x += 0.045, 90)
 }
 
-// Clic pour tirer
-document.addEventListener('click', () => {
-  if(!controls.isLocked) return
-  shoot()
-  // Petit recul visuel
-  controls.getObject().rotation.x -= 0.04
-  setTimeout(()=>controls.getObject().rotation.x += 0.04, 80)
-})
+document.addEventListener('click', shoot)
 
-// --- Ennemis ---
-function createEnemy(x,z) {
+// --- Création ennemi ---
+function createEnemy(x, z) {
   const group = new THREE.Group()
-  
+
   const body = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.4,0.4,1.8,12),
-    new THREE.MeshStandardMaterial({color:0xc41e3a})
+    new THREE.CylinderGeometry(0.45, 0.45, 1.9, 12),
+    new THREE.MeshStandardMaterial({ color: 0xc41e3a })
   )
-  body.position.y = 0.9
+  body.position.y = 0.95
   body.castShadow = true
   group.add(body)
-  
+
   const head = new THREE.Mesh(
-    new THREE.SphereGeometry(0.35,16,16),
-    new THREE.MeshStandardMaterial({color:0xc41e3a})
+    new THREE.SphereGeometry(0.38, 16, 16),
+    new THREE.MeshStandardMaterial({ color: 0xc41e3a })
   )
-  head.position.y = 1.9
+  head.position.y = 2.0
   group.add(head)
-  
+
   group.position.set(x, 0, z)
   scene.add(group)
-  
+
   const bodyPhys = new CANNON.Body({
     mass: 5,
-    shape: new CANNON.Cylinder(0.4,0.4,1.8,8)
+    shape: new CANNON.Cylinder(0.45, 0.45, 1.9, 8)
   })
   bodyPhys.position.copy(group.position)
-  bodyPhys.position.y += 0.9
+  bodyPhys.position.y += 0.95
   world.addBody(bodyPhys)
-  
-  return {mesh:group, body:bodyPhys, alive:true, hp:3}
+
+  return { mesh: group, body: bodyPhys, alive: true, hp: 4 }
 }
 
 function spawnRound() {
+  // Nettoyage anciens ennemis
   enemies.forEach(e => {
-    if(e.alive){
+    if (e.alive) {
       scene.remove(e.mesh)
       world.removeBody(e.body)
     }
   })
   enemies = []
 
-  const count = 3 + round * 2
-  
-  for(let i=0; i<count; i++){
-    const angle = (i / count) * Math.PI * 2
-    const dist = 25 + Math.random()*15
+  const count = 4 + round * 2
+
+  for (let i = 0; i < count; i++) {
+    const angle = (i / count) * Math.PI * 2 + Math.random() * 0.8
+    const dist = 30 + Math.random() * 25
     const x = Math.cos(angle) * dist
     const z = Math.sin(angle) * dist
-    enemies.push(createEnemy(x,z))
+    enemies.push(createEnemy(x, z))
   }
-  
-  document.getElementById('enemiesLeft').textContent = enemies.filter(e=>e.alive).length
+
+  document.getElementById('enemiesLeft').textContent = enemies.length
   document.getElementById('round').textContent = round
-  document.getElementById('message').textContent = `Manche ${round}`
-  setTimeout(()=>document.getElementById('message').textContent='', 1800)
+  document.getElementById('message').textContent = `Manche ${round} !`
+  setTimeout(() => document.getElementById('message').textContent = '', 2200)
 }
 
-// --- Game loop ---
+// --- Boucle principale ---
 let prevTime = performance.now()
 
 function animate(time) {
   requestAnimationFrame(animate)
-  
+
   const delta = (time - prevTime) / 1000
   prevTime = time
 
-  world.step(1/60, delta, 3)
+  world.step(1 / 60, delta, 3)
 
-  // Mise à jour position caméra/joueur
-  if(controls.isLocked && health > 0) {
-    velocity.x -= velocity.x * 8.0 * delta
-    velocity.z -= velocity.z * 8.0 * delta
+  if (controls.isLocked && health > 0) {
+    velocity.x -= velocity.x * 10 * delta
+    velocity.z -= velocity.z * 10 * delta
 
     direction.z = Number(move.forward) - Number(move.backward)
     direction.x = Number(move.right) - Number(move.left)
     direction.normalize()
 
-    const speed = 28
+    const speed = 32
 
     if (move.forward || move.backward) velocity.z -= direction.z * speed * delta
     if (move.left || move.right) velocity.x -= direction.x * speed * delta
@@ -294,60 +301,59 @@ function animate(time) {
 
     // Saut
     if (move.jump && canJump) {
-      playerBody.velocity.y = 18
+      playerBody.velocity.y = 20
       canJump = false
     }
 
-    // Synchro physique → visuel
+    // Synchro caméra ↔ physique
     controls.getObject().position.copy(playerBody.position)
-    controls.getObject().position.y -= 1.6 // yeux au bon endroit
+    controls.getObject().position.y -= 1.65 // hauteur des yeux
   }
 
-  // Bullets
-  for(let i=bullets.length-1; i>=0; i--){
+  // Gestion des balles
+  for (let i = bullets.length - 1; i >= 0; i--) {
     const b = bullets[i]
     b.position.add(b.velocity.clone().multiplyScalar(delta))
-    
-    // Collision simple avec ennemis
-    for(let e of enemies){
-      if(!e.alive) continue
+
+    // Collision avec ennemis (approximation sphère)
+    for (let e of enemies) {
+      if (!e.alive) continue
       const dist = b.position.distanceTo(e.mesh.position)
-      if(dist < 1.2){
+      if (dist < 1.4) {
         e.hp--
-        if(e.hp <= 0){
+        if (e.hp <= 0) {
           e.alive = false
           scene.remove(e.mesh)
           world.removeBody(e.body)
-          score += 100
+          score += 120
           document.getElementById('score').textContent = score
         }
         scene.remove(b)
-        bullets.splice(i,1)
+        bullets.splice(i, 1)
         break
       }
     }
 
-    // Suppression bullets trop loin
-    if(b.position.length() > 200){
+    // Supprimer balles trop loin
+    if (b.position.length() > 250) {
       scene.remove(b)
-      bullets.splice(i,1)
+      bullets.splice(i, 1)
     }
   }
 
   // Mise à jour HUD
   document.getElementById('health').textContent = health
+  const alive = enemies.filter(e => e.alive).length
+  document.getElementById('enemiesLeft').textContent = alive
 
-  // Victoire manche ?
-  const aliveEnemies = enemies.filter(e=>e.alive).length
-  document.getElementById('enemiesLeft').textContent = aliveEnemies
-
-  if(aliveEnemies === 0 && health > 0){
+  // Victoire de manche
+  if (alive === 0 && health > 0 && enemies.length > 0) {
     round++
-    setTimeout(spawnRound, 2200)
+    setTimeout(spawnRound, 2500)
   }
 
   // Défaite
-  if(health <= 0){
+  if (health <= 0) {
     document.getElementById('message').textContent = "GAME OVER"
     document.getElementById('message').style.color = "#ff4444"
   }
@@ -364,20 +370,20 @@ document.getElementById('startBtn').onclick = () => {
   spawnRound()
 }
 
-// Resize
-window.addEventListener('resize', ()=>{
+// Gestion redimensionnement
+window.addEventListener('resize', () => {
   camera.aspect = innerWidth / innerHeight
   camera.updateProjectionMatrix()
   renderer.setSize(innerWidth, innerHeight)
 })
 
-// Bonus : petit recul quand on prend des dégâts (simulation)
-setInterval(()=>{
-  if(Math.random() < 0.03 && health > 0){
-    health -= 8
-    controls.getObject().rotation.x += 0.06
+// Simulation de dégâts (optionnel - pour le fun)
+setInterval(() => {
+  if (Math.random() < 0.04 && health > 0 && controls.isLocked) {
+    health -= 10
+    controls.getObject().rotation.x += 0.07 // petit recul quand touché
   }
-}, 1800)
+}, 2200)
 
 </script>
 </body>
